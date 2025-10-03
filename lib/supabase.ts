@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+const reviewsTable = process.env.NEXT_PUBLIC_REVIEWS_TABLE?.trim() || 'reviews'
+const repliesTable = process.env.NEXT_PUBLIC_REPLIES_TABLE?.trim() || ''
+const hasSeparateRepliesTable = Boolean(repliesTable && repliesTable !== reviewsTable)
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Please check your environment variables.')
   console.warn('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing')
@@ -16,9 +20,35 @@ export const supabase = createClient(
 
 // Database table names
 export const TABLES = {
-  REVIEWS: process.env.NEXT_PUBLIC_REVIEWS_TABLE || 'reviews',
-  REPLIES: process.env.NEXT_PUBLIC_REPLIES_TABLE || 'review_replies'
+  REVIEWS: reviewsTable,
+  REPLIES: repliesTable
 } as const
+
+const buildSelectFields = () => {
+  if (hasSeparateRepliesTable) {
+    return `*, ${TABLES.REPLIES}(reply_text, created_at)`
+  }
+  return '*'
+}
+
+const normalizeReview = (review: any) => {
+  if (hasSeparateRepliesTable) {
+    const replies = ((review[TABLES.REPLIES] as any[]) || [])
+    return {
+      ...review,
+      has_reply: replies.length > 0,
+      developer_reply: replies[0]?.reply_text ?? null,
+      helpful_count: review.helpful_count || 0
+    }
+  }
+
+  return {
+    ...review,
+    has_reply: Boolean(review.developer_reply),
+    developer_reply: review.developer_reply ?? null,
+    helpful_count: review.helpful_count || 0
+  }
+}
 
 // Types for our database
 export interface Review {
@@ -53,7 +83,7 @@ export class ReviewService {
   static async getReviews(timeRangeDays: number = 90): Promise<Review[]> {
     const { data, error } = await supabase
       .from(TABLES.REVIEWS)
-      .select('*')
+      .select(buildSelectFields())
       .order('id', { ascending: false })
 
     if (error) {
@@ -62,17 +92,13 @@ export class ReviewService {
     }
 
     // Transform the data to match our interface
-    return (data as any[])?.map((review: any) => ({
-      ...review,
-      has_reply: !!review.developer_reply,
-      helpful_count: review.helpful_count || 0
-    })) || []
+    return (data as any[])?.map(normalizeReview) || []
   }
 
   static async getAllReviews(): Promise<Review[]> {
     const { data, error } = await supabase
       .from(TABLES.REVIEWS)
-      .select('*')
+      .select(buildSelectFields())
       .order('id', { ascending: false })
 
     if (error) {
@@ -80,11 +106,7 @@ export class ReviewService {
       throw error
     }
 
-    return (data as any[])?.map((review: any) => ({
-      ...review,
-      has_reply: !!review.developer_reply,
-      helpful_count: review.helpful_count || 0
-    })) || []
+    return (data as any[])?.map(normalizeReview) || []
   }
 
   static async addReview(review: Omit<Review, 'id' | 'created_at' | 'updated_at'>): Promise<Review> {
@@ -103,6 +125,10 @@ export class ReviewService {
   }
 
   static async addReply(reviewId: number, replyText: string): Promise<ReviewReply> {
+    if (!TABLES.REPLIES) {
+      throw new Error('Replies table is not configured. Set NEXT_PUBLIC_REPLIES_TABLE to enable replies.')
+    }
+
     const { data, error } = await supabase
       .from(TABLES.REPLIES)
       .insert([{ review_id: reviewId, reply_text: replyText }])
@@ -134,6 +160,11 @@ export class ReviewService {
   }
 
   static subscribeToReplies(callback: ReviewSubscriptionCallback) {
+    if (!TABLES.REPLIES) {
+      console.warn('Replies table not configured; skipping replies subscription.')
+      return null
+    }
+
     return supabase
       .channel('replies_changes')
       .on(
@@ -149,6 +180,10 @@ export class ReviewService {
   }
 
   static unsubscribe(channel: any) {
+    if (!channel) {
+      return
+    }
+
     return supabase.removeChannel(channel)
   }
 }
