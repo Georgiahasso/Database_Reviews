@@ -15,13 +15,13 @@ fi
 
 # Check for potential secrets in code (excluding safe references)
 if grep -r "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" \
-    --exclude-dir=node_modules --exclude="*.md" --exclude=".gitignore" --exclude="*.sh" --exclude="*.yml" --exclude="env.example" . | \
+    --exclude-dir=node_modules --exclude-dir=.github --exclude="*.md" --exclude=".gitignore" --exclude="*.sh" --exclude="*.yml" --exclude="env.example" . | \
     grep -v "example\|dummy\|placeholder\|your_supabase_\|process\.env\.\|console\.warn" | grep -q .; then
     echo "❌ ERROR: Potential secrets found in code!"
     echo "Please ensure all sensitive data is in environment variables only."
     echo "Found suspicious patterns:"
     grep -r "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" \
-        --exclude-dir=node_modules --exclude="*.md" --exclude=".gitignore" --exclude="*.sh" --exclude="*.yml" --exclude="env.example" . | \
+        --exclude-dir=node_modules --exclude-dir=.github --exclude="*.md" --exclude=".gitignore" --exclude="*.sh" --exclude="*.yml" --exclude="env.example" . | \
         grep -v "example\|dummy\|placeholder\|your_supabase_\|process\.env\.\|console\.warn"
     exit 1
 fi

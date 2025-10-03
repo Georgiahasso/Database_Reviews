@@ -17,13 +17,13 @@ jobs:
         run: |
           # Check for potential secrets in code (excluding safe references)
           if grep -r "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" \
-              --exclude-dir=node_modules --exclude="*.md" --exclude=".gitignore" --exclude="*.yml" --exclude="env.example" . | \
+              --exclude-dir=node_modules --exclude-dir=.github --exclude="*.md" --exclude=".gitignore" --exclude="*.yml" --exclude="env.example" . | \
               grep -v "example\|dummy\|placeholder\|your_supabase_\|process\.env\.\|console\.warn" | grep -q .; then
             echo "❌ SECURITY WARNING: Potential secrets found in code!"
             echo "Please ensure all sensitive data is in environment variables only."
             echo "Found suspicious patterns:"
             grep -r "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" \
-                --exclude-dir=node_modules --exclude="*.md" --exclude=".gitignore" --exclude="*.yml" --exclude="env.example" . | \
+                --exclude-dir=node_modules --exclude-dir=.github --exclude="*.md" --exclude=".gitignore" --exclude="*.yml" --exclude="env.example" . | \
                 grep -v "example\|dummy\|placeholder\|your_supabase_\|process\.env\.\|console\.warn"
             exit 1
           fi
@@ -49,9 +49,15 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: "package-lock.json"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Run linting
         run: npm run lint
