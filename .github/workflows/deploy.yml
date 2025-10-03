@@ -1,0 +1,75 @@
+name: Deploy Review Dashboard
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Security Check - Ensure no secrets in code
+        run: |
+          # Check for potential secrets in code
+          if grep -r "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" --exclude-dir=node_modules --exclude="*.md" --exclude=".gitignore" .; then
+            echo "❌ SECURITY WARNING: Potential secrets found in code!"
+            echo "Please ensure all sensitive data is in environment variables only."
+            exit 1
+          fi
+          echo "✅ No secrets found in code"
+
+      - name: Check for .env files
+        run: |
+          if find . -name ".env*" -not -name ".env.example" | grep -q .; then
+            echo "❌ SECURITY WARNING: .env files found!"
+            echo "Please remove .env files before committing."
+            exit 1
+          fi
+          echo "✅ No .env files found"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Build project
+        run: npm run build
+        env:
+          # Use dummy values for build (not real secrets)
+          NEXT_PUBLIC_SUPABASE_URL: https://dummy.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-key-for-build-only
+
+  deploy:
+    needs: [security-check, test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./
+          scope: ${{ secrets.VERCEL_ORG_ID }}
